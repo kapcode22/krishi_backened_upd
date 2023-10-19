@@ -14,7 +14,6 @@ const errorHandler = require("./middleware/errorHandler");
 app.use(cors());
 app.use(express.json());
 app.use(errorHandler);
-
 const PORT = process.env.PORT || 8080;
 
 // mongodb connection
@@ -23,13 +22,14 @@ connectDb();
 
 
 //schema
-const userSchema = mongoose.Schema({
+const userSchema = new mongoose.Schema({
   firstname: String,
   lastname: String,
   email: {
     type: String,
     unique: true,
   },
+  number:String,
   password: {
     type: String,
     required: true,
@@ -79,9 +79,9 @@ const agriModel = mongoose.model("agri", agriSchema);
 //api signup
 
 app.post("/signup", async (req, res) => {
-  const { firstname, lastname, email, password, confirmPassword } = req.body;
-  // const hashedPassword =await bcrypt.hashSync(password,10);
-  //  const hashedconfirmPassword =await bcrypt.hash(confirmPassword,10);
+  const { firstname, lastname, email,number, password, confirmPassword } = req.body;
+  const hashedPassword =await bcrypt.hash(password,10);
+  const hashedconfirmPassword =await bcrypt.hash(confirmPassword,10);
   try {
     const oldUser = await userModel.findOne({ email });
 
@@ -92,22 +92,23 @@ app.post("/signup", async (req, res) => {
       firstname,
       lastname,
       email,
-      password,
-      confirmPassword,
+      number,
+      password:hashedPassword,
+      confirmPassword:hashedconfirmPassword,
     });
     res.send({ status: "ok" });
-  } catch (error) {
+  }
+  catch (error) {
     res.send({ status: "error" });
   }
 
-  // res.json({ message: "register the user" });
 });
 
 
 //api login
 app.post("/login", async (req, res) => {
   const { email, password } = req.body;
-
+try{
   const user = await userModel.findOne({ email });
   if (!user) {
     return res.json({ error: "User not found" });
@@ -116,17 +117,22 @@ app.post("/login", async (req, res) => {
     const token = jwt.sign({}, JWT_SECRET);
 
     if (res.status(201)) {
-      return res.json({ status: "Ok"});
+      return res.json({ status: "Ok",data:token});
     } else {
       return res.json({ error: "error" });
     }
   }
+}
+ catch{
   res.json({ status: "error", error: "Invalid Password" });
+ }
+ 
 });
-// api wagers
 
+
+// api wagers
 app.post("/wagers",  async (req, res) =>{
-  const {firstname,lastname,email,address,District, state,NumberofWager,work,pincode,contactNo} = req.body;
+  const{ firstname, lastname ,email, contactNo, address,District,state,pincode,Wagers,work } = req.body;
 
   try {
     const oldUser = await wagerModel.findOne({ email });
@@ -141,7 +147,7 @@ app.post("/wagers",  async (req, res) =>{
       address,
       District,
       state,
-      NumberofWager,
+      Wagers,
       work,
       pincode,
       contactNo,
@@ -152,10 +158,9 @@ app.post("/wagers",  async (req, res) =>{
   }
 });
 
-// update api agris
-
+// api agris
 app.post("/agris",  async (req, res) =>{
-  const {firstname,lastname,email,contactNo,address,District,state,pincode,machine} = req.body;
+  const { firstname, lastname, email, contactNo, address, District, state, pincode,machine } = req.body;
 
   try {
     const oldUser = await agriModel.findOne({ email });
@@ -179,6 +184,21 @@ app.post("/agris",  async (req, res) =>{
     res.send({ status: "error" });
   }
 });
+
+app.post("/profile", async(req,res)=>{
+  const {token}=req.body;
+  try{
+     const user=jwt.verify(token.JWT_SECRET);
+     const useremail = user.email;
+     user.findOne({email:useremail})
+     .then((data)=>{
+      res.send({status:"ok",data:data});
+     })
+     .catch((error)=>{
+      res.send({status:"error",data:error});
+     })
+  }catch(error){}
+})
 
 // get api agris -- working 
 app.get("/getagriuser", async(req,res)=>{
