@@ -8,6 +8,7 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 //random number 
 const JWT_SECRET = "qwertyuiopasdfghjklzxcvbnm1234567890(){}";
+const stripe= require("stripe")(process.env.SECRET_STRIPE_KEY)
 
 //const connectDb =require("./config/dbConnection");
 const errorHandler = require("./middleware/errorHandler");
@@ -37,6 +38,7 @@ const userSchema = new mongoose.Schema({
     max: 12,
   },
   confirmPassword: String,
+  userType:String,
 });
 
 
@@ -54,6 +56,7 @@ const wagerSchema = mongoose.Schema({
   NumberofWager: String,
   work: String,
   contactNo:String ,
+  amount:String,
 });
 
 
@@ -71,6 +74,7 @@ const agriSchema = mongoose.Schema({
   state: String,
   pinocde: String,
   machine:String,
+  amount:String,
 });
 
 const userModel = mongoose.model("user", userSchema);
@@ -79,7 +83,7 @@ const agriModel = mongoose.model("agri", agriSchema);
 //api signup
 
 app.post("/signup", async (req, res) => {
-  const { firstname, lastname, email,number, password, confirmPassword } = req.body;
+  const { firstname, lastname, email,number, password, confirmPassword,userType } = req.body;
   const hashedPassword =await bcrypt.hash(password,10);
   const hashedconfirmPassword =await bcrypt.hash(confirmPassword,10);
   try {
@@ -95,6 +99,7 @@ app.post("/signup", async (req, res) => {
       number,
       password:hashedPassword,
       confirmPassword:hashedconfirmPassword,
+      userType,
     });
     res.send({ status: "ok" });
   }
@@ -132,7 +137,7 @@ try{
 
 // api wagers
 app.post("/wagers",  async (req, res) =>{
-  const{ firstname, lastname ,email, contactNo, address,District,state,pincode,Wagers,work } = req.body;
+  const{ firstname, lastname ,email, contactNo, address,District,state,pincode,Wagers,work,amount} = req.body;
 
   try {
     const oldUser = await wagerModel.findOne({ email });
@@ -151,6 +156,7 @@ app.post("/wagers",  async (req, res) =>{
       work,
       pincode,
       contactNo,
+      amount
   });
     res.send({ status: "request created successfully" });
   }catch (error) {
@@ -160,7 +166,7 @@ app.post("/wagers",  async (req, res) =>{
 
 // api agris
 app.post("/agris",  async (req, res) =>{
-  const { firstname, lastname, email, contactNo, address, District, state, pincode,machine } = req.body;
+  const { firstname, lastname, email, contactNo, address, District, state, pincode,machine,amount } = req.body;
 
   try {
     const oldUser = await agriModel.findOne({ email });
@@ -178,12 +184,22 @@ app.post("/agris",  async (req, res) =>{
       state,
       pincode,
       machine,
+      amount,
   });
     res.send({ status: "request created successfully" });
   }catch (error) {
     res.send({ status: "error" });
   }
 });
+
+
+app.post("/payment",async(req,res)=>{
+  const { firstname, lastname, contactNo,machine,amount } = req.body;
+ 
+   console.log(req.body);
+   res.json({ status: 'ok', message: 'Payment successful' });
+});
+
 
 app.post("/profile", async(req,res)=>{
   const {token}=req.body;
