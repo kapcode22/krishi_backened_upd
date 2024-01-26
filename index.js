@@ -24,13 +24,24 @@ connectDb();
 
 //schema
 const userSchema = new mongoose.Schema({
-  firstname: String,
-  lastname: String,
+  firstname:{
+    type:String,
+    required:true,
+    trime:true,
+  },
+  lastname: {
+    type:String,
+    required:true,
+    trime:true,
+  },
   email: {
     type: String,
     unique: true,
   },
-  number:String,
+  number:{
+    type:String,
+    required:true,
+  },
   password: {
     type: String,
     required: true,
@@ -49,14 +60,14 @@ const wagerSchema = mongoose.Schema({
     type: String,
     unique: true,
   },
+  contactNo: String,
   address: String,
   District: String,
   state: String,
-  pinocde: String,
-  NumberofWager: String,
+  pincode: String,
   work: String,
-  contactNo:String ,
-  amount:String,
+  NumberofWagers: String, // Corrected field name to match the request
+  amount: String,
 });
 
 
@@ -137,7 +148,7 @@ try{
 
 // api wagers
 app.post("/wagers",  async (req, res) =>{
-  const{ firstname, lastname ,email, contactNo, address,District,state,pincode,Wagers,work,amount} = req.body;
+  const{ firstname, lastname ,email, contactNo, address,District,state,pincode,NumberofWagers,work,amount} = req.body;
 
   try {
     const oldUser = await wagerModel.findOne({ email });
@@ -149,13 +160,13 @@ app.post("/wagers",  async (req, res) =>{
       firstname,
       lastname,
       email,
+      contactNo,
       address,
       District,
       state,
-      Wagers,
-      work,
       pincode,
-      contactNo,
+      work,
+      NumberofWagers,
       amount
   });
     res.send({ status: "request created successfully" });
@@ -193,39 +204,57 @@ app.post("/agris",  async (req, res) =>{
 });
 
 
-app.post("/payment",async(req,res)=>{
-  const { firstname, lastname, contactNo,machine,amount } = req.body;
- 
-   console.log(req.body);
-   res.json({ status: 'ok', message: 'Payment successful' });
+// app.post("/payment",async(req,res)=>{
+//   const {firstname, lastname,address,contactNo, amount } = req.body;
+//   const session =await stripe.checkout.session.create({
+//     payment_method_types:["card"],
+//     totalamount:amount,
+//     mode:"payment",
+//     success_url:"http://localhost:3000/success",
+//     cancel_url:"http://localhost:3000/cancel"
+//   })
+
+//   res.json({id:session.id})
+   
+// });
+
+
+// get api agris -- working 
+app.get("/getagriuser", async (req, res) => {
+  const search = req.query.search || "";
+  const machine = req.query.machine || "All";
+  console.log("Received search query:", search);
+
+  const query = {
+    address: { $regex: search, $options: "i" }
+  }
+  if (machine !== "All") {
+    query.machine = machine; // Only include the machine in the query if it's not "All"
+  }
+
+
+  try {
+    const allAgriUsers = await agriModel.find(query);
+    console.log("Query result:", allAgriUsers);
+    res.send({ status: "ok", data: allAgriUsers });
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({ status: "error", message: "Internal Server Error" });
+  }
 });
 
 
-app.post("/profile", async(req,res)=>{
-  const {token}=req.body;
-  try{
-     const user=jwt.verify(token.JWT_SECRET);
-     const useremail = user.email;
-     user.findOne({email:useremail})
-     .then((data)=>{
-      res.send({status:"ok",data:data});
-     })
-     .catch((error)=>{
-      res.send({status:"error",data:error});
-     })
-  }catch(error){}
-})
-
-// get api agris -- working 
-app.get("/getagriuser", async(req,res)=>{
+app.get("/getsingleagri", async(req,res)=>{
+  const {id}=req.params;
   try {
-    const allagriuser= await agriModel.find({});
-    res.send({status:"ok",data:allagriuser});
+    const agriuser= await agriModel.find({_id:id});
+    res.send({status:"ok",data:agriuser});
   } catch (error) {
     console.log(error);
   }
   
 });
+
 
 // get api wager --working
 app.get("/getwageruser", async(req,res)=>{
@@ -237,6 +266,71 @@ app.get("/getwageruser", async(req,res)=>{
   }
   
 });
+
+
+app.post("/payment", async (req, res) => {
+  const { firstname, lastname, address, contactNo, amount } = req.body;
+
+  try {
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: "firstname+lastname",
+            },
+            unit_amount: amount * 100, // amount in cents
+          },
+          quantity: 1,
+        },
+      ],
+      mode: "payment",
+      success_url: "http://localhost:3000/success",
+      cancel_url: "http://localhost:3000/cancel",
+    });
+
+    res.json({ id: session.id });
+  } catch (error) {
+    console.error("Error creating checkout session:", error);
+    res.status(500).json({ error: "Unable to process payment" });
+  }
+});
+
+// Handle webhook events for payment success/failure
+app.post("/webhook", async (req, res) => {
+  let data;
+  let eventType;
+  const sig = req.headers["stripe-signature"];
+
+  try {
+    data = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    eventType = data.type;
+  } catch (error) {
+    console.error("Webhook error:", error.message);
+    return res.status(400).send(`Webhook Error: ${error.message}`);
+  }
+
+  // Handle the event
+  switch (eventType) {
+    case "checkout.session.completed":
+      const session = data.object;
+      // Handle successful payment event
+      console.log("Payment successful:", session);
+      break;
+    case "checkout.session.async_payment_failed":
+      // Handle failed payment event
+      console.log("Payment failed:", data.object);
+      break;
+    // Add other event types if necessary
+    default:
+      console.log(`Unhandled event type ${eventType}`);
+  }
+
+  res.status(200).json({ received: true });
+});
+
 
 
 app.listen(PORT, () => console.log("server is running at port: " + PORT));
